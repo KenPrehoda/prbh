@@ -8,6 +8,9 @@ BASIC_RES = {'R':0.1,'K':0.07,'H':0.04,'D':-0.06,'E':-0.06,'Y':0.0}
 M3_RES = {'F':0.25,'L':0.25,'M':0.25,'I':0.15,'V':0.1,'W':0.1,
         'Y':0.1,'A':0.05,'R':0.1,'K':0.1,'H':0.05}
 M2_RES = {'R':0.35,'K':0.15,'H':0.05}
+BH_DICT = {'O':-.17, 'U':0,'X':0,'A': -.17, 'C':0.24, 'D':-1.23, 'E': -2.02, 'F':1.13,
+            'G':-.01, 'H':-.17, 'I':.31, 'K':2,'L':.56,'M':.23,'N':-.42,'P':- .45,
+            'Q':-.58,'R':2, 'S':-.13,'T':-.14,'V':-.07,'W':1.85,'Y':.94}
 
 @dataclass
 class fasta:
@@ -74,15 +77,14 @@ def calc_aPKC_sites(seq, threshold=0.6):
                 sites.append(aPKC_site(pos,score,seq[max(0,pos-
                                         7):min(pos+17,len(seq))]))
     return sites
-bhDict = {'O':-.17, 'U':0,'X':0,'A': -.17, 'C':0.24, 'D':-1.23, 'E': -2.02, 'F':1.13, 'G':-.01, 'H':-.17, 'I':.31, 'K':2,'L':.56,'M':.23,'N':-.42,'P':- .45,'Q':-.58,'R':2, 'S':-.13,'T':-.14,'V':-.07,'W':1.85,'Y':.94}
 def running_bh_sum(seq, window_size): 
     pos = 0
     if len(seq) < window_size: 
         return
-    running_sum = sum([bhDict.get(x,0) for x in seq[:window_size]]) 
+    running_sum = sum([BH_DICT.get(x,0) for x in seq[:window_size]]) 
     yield running_sum
     for c in seq[window_size:]:
-        running_sum += bhDict.get(c,0) - bhDict.get(seq[pos],0) 
+        running_sum += BH_DICT.get(c,0) - BH_DICT.get(seq[pos],0) 
         pos += 1
         yield running_sum
 
@@ -148,50 +150,20 @@ def fasta_prbh(fasta):
             for i in prbhs:
                 hits.append(tagged_prbh(i,rec)) 
     return hits
-def bh_motifs_string(seq,motifs):
-    hit_string = list(' '*len(seq))
-    motif_string = "" 
-    for a in motifs:
-        width = a.end - a.start
-        motif_string += ' '*(a.start - len(motif_string)) 
-        motif_string += "{:*^width}".format("{:.1f}".format(a.height))
-    return motif_string
 
+def format_prbh(prbh):
+    return f'{prbh.fasta.desc[:30]}\t{prbh.prbh.bh.start}\t{prbh.prbh.bh.end}\t{prbh.prbh.score:.3f}'
 
-def apkc_sites_strings(seq,sites):
-    hit_string = list(' '*len(seq))
-    score_string = list(' '*len(seq))
-    for a in sites:
-        hit_string[a.pos] = '|'
-    hit_string = "".join(hit_string)
-    for a in sites:
-        s = "{:.1f}".format(a.score)
-        score_string = score_string[:a.pos-1]+list(s)+list(' '*(len(seq)-a.pos+1-len(s))) #score_string[a.pos-1+len(s):-len(s)+2]
-    score_string = "".join(score_string)
-    return hit_string,score_string
-
-def max_site(apkcs):
-    maxs = 0.0
-    for i in apkcs:
-        maxs = max(maxs,i.score)
-    return maxs
-
-if __name__ == "main":
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(
                     prog='prbh',
                     description='implements the PhosphoRegulated Basic Hydrophobic (PRBH) motif finder as described in Bailey and Prehoda, Dev Cell (2018)')
     parser.add_argument('fasta_file',help="File in FASTA format (can be gzipped) that contains protein sequences")
     parser.add_argument('-o', '--output', help="Optional output file (otherwise output it written to stdout)")
     args = parser.parse_args()
-    print(args)
-
-fly = fasta_prbh('/Path_to_input_file /7227.fasta.gz')
-fly_s = sorted(fly,key=lambda rec: rec.prbh.score, reverse=True)
-
-with open('/File_for_results.txt', 'w+') as f1:
-    for k in sorted_prbh:
-        for i in k:
-            s = ''
-            for j in i.prbh.apkcs:
-                s += "{}*{}*".format(j.score,j.seq)
-            print 
+    prbhs = sorted(fasta_prbh(args.fasta_file),
+                   key=lambda rec: rec.prbh.score, reverse=True)
+    output = open(args.output,"w+") if args.output else None
+    print("FASTA Description\tBH start\tBH end\tPRBH score",file=output)
+    for prbh in prbhs:
+        print(format_prbh(prbh),file=output)
